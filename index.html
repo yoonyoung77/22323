@@ -1,0 +1,1701 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>중드 《태평년(太平年)》 인물 관계 네트워크</title>
+  <style>
+    :root {
+      --bg-ink: #0d1117;
+      --bg-panel: rgba(20, 26, 36, 0.88);
+      --bg-card: rgba(13, 17, 23, 0.78);
+      --border-gold: rgba(212, 175, 55, 0.3);
+      --gold-accent: #d4af37;
+      --gold-light: #fde68a;
+      --text-main: #f1f5f9;
+      --text-muted: #94a3b8;
+      --font-sans: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-serif: 'Batang', 'AppleMyungjo', 'Noto Serif KR', Georgia, serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-ink);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      user-select: none;
+    }
+
+    /* 고지도 격자 및 수묵 배경 */
+    .canvas-backdrop {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      background:
+        radial-gradient(circle at 50% 48%, rgba(30, 41, 59, 0.52) 0%, rgba(13, 17, 23, 0.98) 76%),
+        repeating-linear-gradient(0deg, rgba(212, 175, 55, 0.025) 0px, rgba(212, 175, 55, 0.025) 1px, transparent 1px, transparent 56px),
+        repeating-linear-gradient(90deg, rgba(212, 175, 55, 0.025) 0px, rgba(212, 175, 55, 0.025) 1px, transparent 1px, transparent 56px);
+    }
+
+    #network-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+      touch-action: none;
+    }
+
+    #network-svg.panning {
+      cursor: grabbing;
+    }
+
+    /* 글래스 패널 공통 */
+    .panel {
+      background: var(--bg-panel);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-gold);
+      border-radius: 16px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+    }
+
+    /* 커스텀 스크롤바 */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(13, 17, 23, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(212, 175, 55, 0.35);
+      border-radius: 99px;
+    }
+
+    /* 상단 헤더 */
+    .top-bar {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 30;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .title-box {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 18px;
+      border-left: 4px solid var(--gold-accent);
+    }
+
+    .seal-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(212, 175, 55, 0.14);
+      border: 1px solid rgba(212, 175, 55, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-serif);
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--gold-light);
+      flex-shrink: 0;
+    }
+
+    .title-main {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      font-weight: 700;
+      color: #fef3c7;
+      letter-spacing: 0.4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .title-pill {
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(212, 175, 55, 0.16);
+      color: var(--gold-light);
+      border: 1px solid rgba(212, 175, 55, 0.35);
+    }
+
+    .title-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .search-box {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      position: relative;
+    }
+
+    .search-input-wrap {
+      position: relative;
+      width: 240px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: rgba(13, 17, 23, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      border-radius: 10px;
+      padding: 7px 28px 7px 12px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      border-color: var(--gold-accent);
+    }
+
+    .clear-search {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      display: none;
+    }
+
+    .search-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #141a24;
+      border: 1px solid var(--border-gold);
+      border-radius: 12px;
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 50;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.75);
+      display: none;
+    }
+
+    .search-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .search-item:hover {
+      background: rgba(212, 175, 55, 0.12);
+    }
+
+    .btn-ctrl {
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      color: var(--text-main);
+      padding: 7px 11px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+
+    .btn-ctrl:hover {
+      background: rgba(51, 65, 85, 0.9);
+      border-color: rgba(212, 175, 55, 0.5);
+    }
+
+    .btn-ctrl.active {
+      background: rgba(212, 175, 55, 0.2);
+      border-color: var(--gold-accent);
+      color: var(--gold-light);
+    }
+
+    /* 좌측 필터 사이드바 */
+    .left-sidebar {
+      position: fixed;
+      top: 86px;
+      left: 14px;
+      width: 280px;
+      max-height: calc(100vh - 102px);
+      overflow-y: auto;
+      z-index: 20;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      transition: transform 0.28s ease, opacity 0.28s ease;
+    }
+
+    .left-sidebar.collapsed {
+      transform: translateX(-320px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .sec-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .sec-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--gold-light);
+    }
+
+    .sec-badge {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.25), transparent);
+    }
+
+    .faction-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .filter-chip {
+      background: rgba(13, 17, 23, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      padding: 6px 9px;
+      color: var(--text-main);
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: all 0.16s;
+    }
+
+    .filter-chip:hover {
+      background: rgba(30, 41, 59, 0.85);
+    }
+
+    .filter-chip.selected {
+      background: rgba(30, 41, 59, 0.95);
+      font-weight: 700;
+    }
+
+    .rel-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .rel-chip {
+      background: rgba(13, 17, 23, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      padding: 4px 8px;
+      color: var(--text-main);
+      font-size: 11px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.16s;
+    }
+
+    .rel-chip:hover {
+      background: rgba(30, 41, 59, 0.85);
+    }
+
+    .rel-chip.selected {
+      background: rgba(30, 41, 59, 0.95);
+      font-weight: 700;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      flex-shrink: 0;
+    }
+
+    .ctrl-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+
+    .legend-box {
+      background: var(--bg-card);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* 우측 상세 인스펙터 */
+    .right-inspector {
+      position: fixed;
+      top: 86px;
+      right: 14px;
+      width: 330px;
+      max-height: calc(100vh - 102px);
+      overflow-y: auto;
+      z-index: 25;
+      padding: 16px;
+      transform: translateX(380px);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.28s ease, opacity 0.28s ease;
+    }
+
+    .right-inspector.open {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .insp-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      margin-bottom: 12px;
+    }
+
+    .insp-card {
+      background: var(--bg-card);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .rel-item-card {
+      background: rgba(13, 17, 23, 0.72);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 10px;
+      padding: 10px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s;
+    }
+
+    .rel-item-card:hover {
+      background: rgba(30, 41, 59, 0.85);
+      border-color: var(--gold-accent);
+    }
+
+    /* 플로팅 툴팁 */
+    .tooltip {
+      position: fixed;
+      z-index: 60;
+      pointer-events: none;
+      background: rgba(10, 14, 20, 0.96);
+      border: 1px solid var(--gold-accent);
+      border-radius: 10px;
+      padding: 8px 11px;
+      font-size: 12px;
+      color: var(--text-main);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.75);
+      max-width: 260px;
+      display: none;
+    }
+
+    /* 하단 힌트 */
+    .bottom-hint {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 15;
+      background: rgba(13, 17, 23, 0.82);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 99px;
+      padding: 5px 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    /* SVG 노드 및 엣지 인터랙션 */
+    .svg-node {
+      cursor: grab;
+      transition: opacity 0.2s ease;
+    }
+    .svg-node:active {
+      cursor: grabbing;
+    }
+    .svg-edge-vis {
+      fill: none;
+      transition: opacity 0.2s ease, stroke-width 0.18s ease;
+      pointer-events: none;
+    }
+    .svg-edge-hit {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 14px;
+      cursor: pointer;
+    }
+    .svg-edge-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-anchor: middle;
+      pointer-events: none;
+      paint-order: stroke;
+      stroke: #0d1117;
+      stroke-width: 3.5px;
+      stroke-linejoin: round;
+    }
+
+    @keyframes pulseHalo {
+      0% { transform: scale(1); opacity: 0.8; }
+      75% { transform: scale(1.38); opacity: 0; }
+      100% { transform: scale(1.38); opacity: 0; }
+    }
+    .halo-pulse {
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: pulseHalo 2.2s infinite ease-out;
+      pointer-events: none;
+    }
+
+    @media (max-width: 768px) {
+      .left-sidebar {
+        top: 126px;
+        width: 250px;
+        max-height: calc(100vh - 142px);
+      }
+      .right-inspector {
+        top: 126px;
+        width: calc(100vw - 28px);
+        max-height: calc(100vh - 142px);
+      }
+      .search-input-wrap {
+        width: 180px;
+      }
+      .bottom-hint {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas-backdrop" id="canvas-wrap">
+    <svg id="network-svg"></svg>
+  </div>
+
+  <!-- 상단 헤더 -->
+  <header class="top-bar">
+    <div class="panel title-box">
+      <div class="seal-badge">太平</div>
+      <div>
+        <div class="title-main">
+          중드 《태평년(太平年)》 인물 관계 네트워크
+          <span class="title-pill">오대십국 대서사시</span>
+        </div>
+        <div class="title-sub">
+          오월 · 북송 · 후주 · 남당 · 후한 <strong>26인 노드</strong> 및 <strong>38개 관계 엣지</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel search-box">
+      <div class="search-input-wrap">
+        <input id="search-input" class="search-input" type="text" placeholder="인물명, 한자(錢弘俶), 역할 검색..." />
+        <button id="clear-search" class="clear-search" title="지우기">✕</button>
+        <div id="search-dropdown" class="search-dropdown"></div>
+      </div>
+      <button id="btn-toggle-sidebar" class="btn-ctrl active" title="필터 패널 열기/닫기">필터 패널</button>
+    </div>
+  </header>
+
+  <!-- 좌측 컨트롤 사이드바 -->
+  <aside id="left-sidebar" class="panel left-sidebar">
+    <div>
+      <div class="sec-header">
+        <span class="sec-title">● 소속 세력 (Faction)</span>
+        <span id="badge-faction" class="sec-badge">전체 26인</span>
+      </div>
+      <div id="faction-list" class="faction-grid"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div>
+      <div class="sec-header">
+        <span class="sec-title">● 관계 유형 (Relation)</span>
+        <span id="badge-relation" class="sec-badge">전체 38개</span>
+      </div>
+      <div id="relation-list" class="rel-wrap"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="legend-box">
+      <div style="color:#e2e8f0; font-weight:700;">시각화 범례</div>
+      <div class="legend-row">
+        <span>━━ 양방향 (Undirected)</span>
+        <span>대등·혈연·동맹</span>
+      </div>
+      <div class="legend-row">
+        <span>━▶ 단방향 (Directed)</span>
+        <span>위계·정변·계승</span>
+      </div>
+      <div class="legend-row">
+        <span style="color:#f87171;">┄┄ 점선 표시</span>
+        <span>갈등·정변·전쟁·배신</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="sec-header">
+        <span class="sec-title">● 캔버스 제어</span>
+      </div>
+      <div class="ctrl-grid">
+        <button id="btn-zoom-in" class="btn-ctrl">＋ 확대</button>
+        <button id="btn-zoom-out" class="btn-ctrl">－ 축소</button>
+        <button id="btn-reset-view" class="btn-ctrl">⟲ 화면 맞춤</button>
+        <button id="btn-toggle-physics" class="btn-ctrl">⏸ 물리 고정</button>
+        <button id="btn-toggle-nlabel" class="btn-ctrl active">인물명 ON</button>
+        <button id="btn-toggle-elabel" class="btn-ctrl">관계명 OFF</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 우측 상세 인스펙터 -->
+  <aside id="right-inspector" class="panel right-inspector">
+    <div class="insp-top">
+      <span id="insp-tag" class="sec-title">상세 정보</span>
+      <button id="btn-close-insp" class="btn-ctrl" style="padding:4px 8px;">✕</button>
+    </div>
+    <div id="insp-body"></div>
+  </aside>
+
+  <!-- 마우스 호버 툴팁 -->
+  <div id="tooltip" class="tooltip"></div>
+
+  <!-- 하단 조작 안내 -->
+  <div class="bottom-hint">
+    🖱️ 인물/관계선 클릭: 상세 서사 탐색 &nbsp;|&nbsp; ✋ 인물 드래그: 위치 이동 &nbsp;|&nbsp; 🔍 배경 드래그/휠: 이동 및 확대·축소
+  </div>
+
+  <script>
+    (function () {
+      // =====================================================================
+      // 1. 데이터 정의 (26인 노드 & 38개 엣지)
+      // =====================================================================
+      const FACTIONS = {
+        "전체": { color: "#e2e8f0", bg: "rgba(226,232,240,0.14)", fill: "#1e293b" },
+        "오월": { color: "#14b8a6", bg: "rgba(20,184,166,0.18)", fill: "#0b3b36" },
+        "북송": { color: "#f59e0b", bg: "rgba(245,158,11,0.18)", fill: "#422c06" },
+        "후주": { color: "#3b82f6", bg: "rgba(59,130,246,0.18)", fill: "#13294b" },
+        "남당": { color: "#a855f7", bg: "rgba(168,85,247,0.18)", fill: "#2e1449" },
+        "후한": { color: "#ef4444", bg: "rgba(239,68,68,0.18)", fill: "#451212" }
+      };
+
+      const RELATIONS = {
+        "전체":     { color: "#94a3b8", dashed: false },
+        "혈연":     { color: "#38bdf8", dashed: false },
+        "혼인":     { color: "#f472b6", dashed: false },
+        "군신":     { color: "#fbbf24", dashed: false },
+        "외교":     { color: "#34d399", dashed: false },
+        "정치갈등": { color: "#ef4444", dashed: true  },
+        "정변":     { color: "#f43f5e", dashed: true  },
+        "전쟁":     { color: "#f97316", dashed: true  },
+        "의형제":   { color: "#a78bfa", dashed: false },
+        "결탁":     { color: "#fb7185", dashed: true  },
+        "배신":     { color: "#e11d48", dashed: true  }
+      };
+
+      const RAW_NODES = [
+        { id: "N01", name: "전홍숙(전숙)", hanja: "錢弘俶", faction: "오월", role: "오월국 5대(마지막) 국왕, 주인공", tier: 1 },
+        { id: "N02", name: "손태진", hanja: "孫太真", faction: "오월", role: "전홍숙의 정실 왕비", tier: 2 },
+        { id: "N03", name: "조광윤", hanja: "趙匡胤", faction: "북송", role: "후주 장수, 훗날 송 태조", tier: 1 },
+        { id: "N04", name: "곽영", hanja: "郭榮", faction: "후주", role: "후주 2대 황제(세종)", tier: 1 },
+        { id: "N05", name: "전홍좌", hanja: "錢弘佐", faction: "오월", role: "오월국 3대 국왕, 전홍숙의 형", tier: 2 },
+        { id: "N06", name: "호진사", hanja: "胡進思", faction: "오월", role: "오월국 원로 대신 및 권신", tier: 2 },
+        { id: "N07", name: "전홍종", hanja: "錢弘倧", faction: "오월", role: "오월국 4대 국왕, 전홍숙의 형 (폐위됨)", tier: 2 },
+        { id: "N08", name: "곽위", hanja: "郭威", faction: "후주", role: "후주 초대 황제(태조), 곽영의 양부", tier: 2 },
+        { id: "N09", name: "조광의", hanja: "趙匡義", faction: "북송", role: "조광윤의 동생, 훗날 송 태종", tier: 2 },
+        { id: "N10", name: "전유류", hanja: "錢惟濬", faction: "오월", role: "전홍숙의 장남, 오월 세자", tier: 3 },
+        { id: "N11", name: "수구소권", hanja: "水丘昭券", faction: "오월", role: "오월의 청렴한 문신이자 충신", tier: 3 },
+        { id: "N12", name: "유승우", hanja: "劉承祐", faction: "후한", role: "후한(後漢)의 2대 황제(은제)", tier: 3 },
+        { id: "N13", name: "유씨 부인", hanja: "俞氏", faction: "오월", role: "전홍숙의 생모 (오월 왕태비)", tier: 3 },
+        { id: "N14", name: "전유치", hanja: "錢惟治", faction: "오월", role: "전홍종의 아들이자 전홍숙의 양자, 오월 장수", tier: 3 },
+        { id: "N15", name: "최인기", hanja: "崔仁冀", faction: "오월", role: "오월의 모사(책사), 납토귀송을 보좌한 핵심 참모", tier: 3 },
+        { id: "N16", name: "원덕소", hanja: "元德昭", faction: "오월", role: "오월의 재상, 원로 문신", tier: 3 },
+        { id: "N17", name: "심호", hanja: "沈虎", faction: "오월", role: "전홍숙을 호위하는 오월의 무장", tier: 3 },
+        { id: "N18", name: "하승훈", hanja: "何承訓", faction: "오월", role: "전홍종을 배신하고 호진사 편에 선 인물", tier: 3 },
+        { id: "N19", name: "조보", hanja: "趙普", faction: "북송", role: "조광윤의 핵심 책사, 송나라 개국 재상", tier: 3 },
+        { id: "N20", name: "석수신", hanja: "石守信", faction: "북송", role: "조광윤의 의형제이자 개국 공신 ('배주석병권'의 주역)", tier: 3 },
+        { id: "N21", name: "왕박", hanja: "王朴", faction: "후주", role: "곽영을 보좌한 후주의 천재적인 책사·재상", tier: 3 },
+        { id: "N22", name: "부황후", hanja: "符皇后", faction: "후주", role: "곽영의 황후", tier: 3 },
+        { id: "N23", name: "두태후", hanja: "杜太后", faction: "북송", role: "조광윤·조광의 형제의 어머니", tier: 3 },
+        { id: "N24", name: "송황후", hanja: "宋皇后", faction: "북송", role: "조광윤의 황후", tier: 3 },
+        { id: "N25", name: "이경", hanja: "李璟", faction: "남당", role: "남당(南唐)의 중주(국왕), 주변국 군주", tier: 2 },
+        { id: "N26", name: "이욱", hanja: "李煜", faction: "남당", role: "남당의 마지막 군주(후주), 오월과 함께 송에 귀순", tier: 2 }
+      ];
+
+      const RAW_EDGES = [
+        { id: "E01", source: "N01", target: "N02", type: "Undirected", category: "혼인", label: "부부_정치적동지", desc: "오월 국왕과 왕비, 평생의 정신적 동반자" },
+        { id: "E02", source: "N01", target: "N03", type: "Undirected", category: "외교", label: "라이벌_대의를공유한지기", desc: "오월과 송의 군주로서 대립하나 태평의 대의를 공유" },
+        { id: "E03", source: "N01", target: "N04", type: "Undirected", category: "외교", label: "상호존중_외교협력", desc: "후주 황제와 오월 군주로서 교류하며 신뢰 구축" },
+        { id: "E04", source: "N01", target: "N05", type: "Undirected", category: "혈연", label: "형제_선왕과후계자", desc: "선왕인 형과 동생, 형의 요절이 전홍숙 각성의 계기" },
+        { id: "E05", source: "N01", target: "N07", type: "Undirected", category: "혈연", label: "형제_폐위후왕위계승", desc: "폐위된 형의 뒤를 이어 전홍숙이 왕위를 계승" },
+        { id: "E06", source: "N01", target: "N13", type: "Directed", category: "혈연", label: "모자", desc: "전홍숙의 생모로서 아들을 지지하고 훈육" },
+        { id: "E07", source: "N01", target: "N10", type: "Directed", category: "혈연", label: "부자_세자책봉", desc: "오월 국왕과 후계자(세자), 납토귀송 과정을 동행" },
+        { id: "E08", source: "N01", target: "N14", type: "Directed", category: "혈연", label: "양부자_군신", desc: "폐위된 형 전홍종의 아들을 거두어 양자로 삼고 중용" },
+        { id: "E09", source: "N01", target: "N06", type: "Undirected", category: "정치갈등", label: "군신갈등_왕권견제", desc: "왕권을 위협하는 권신과 젊은 국왕 간의 팽팽한 긴장" },
+        { id: "E10", source: "N01", target: "N11", type: "Directed", category: "군신", label: "충신보좌", desc: "전홍숙을 보좌하는 청렴한 충신 (호진사에게 희생됨)" },
+        { id: "E11", source: "N01", target: "N15", type: "Directed", category: "군신", label: "책사_납토귀송보좌", desc: "납토귀송의 결단을 실무적으로 보좌한 핵심 참모" },
+        { id: "E12", source: "N01", target: "N16", type: "Directed", category: "군신", label: "재상_국정보필", desc: "조정을 안정시킨 오월의 원로 재상" },
+        { id: "E13", source: "N01", target: "N17", type: "Directed", category: "군신", label: "호위무장", desc: "전홍숙의 곁을 지키는 충직한 무장" },
+        { id: "E14", source: "N05", target: "N07", type: "Undirected", category: "혈연", label: "형제_왕위계승", desc: "3대 왕 전홍좌 사후 동생 전홍종이 4대 왕으로 즉위" },
+        { id: "E15", source: "N05", target: "N06", type: "Directed", category: "군신", label: "섭정권신", desc: "어린 왕 전홍좌를 보필하며 권력을 키운 원로 대신" },
+        { id: "E16", source: "N07", target: "N14", type: "Directed", category: "혈연", label: "친부자", desc: "전홍종이 폐위된 후 아들이 동생 전홍숙에게 입양됨" },
+        { id: "E17", source: "N06", target: "N07", type: "Directed", category: "정변", label: "정변주도_폐위", desc: "전홍종과 권력 충돌 끝에 정변을 일으켜 폐위시킴" },
+        { id: "E18", source: "N06", target: "N11", type: "Directed", category: "정치갈등", label: "정적제거_숙청", desc: "조정 내 권력 다툼 끝에 호진사가 수구소권을 제거" },
+        { id: "E19", source: "N06", target: "N18", type: "Directed", category: "결탁", label: "밀고_정변가담", desc: "하승훈이 전홍종의 계획을 밀고하여 호진사 정변에 가담" },
+        { id: "E20", source: "N07", target: "N18", type: "Directed", category: "배신", label: "측근의배신", desc: "측근으로 믿었던 하승훈에게 배신당해 몰락" },
+        { id: "E21", source: "N03", target: "N04", type: "Directed", category: "군신", label: "군신_전우", desc: "후주 황제와 최측근 장수로서 중원 통일의 기틀 마련" },
+        { id: "E22", source: "N03", target: "N09", type: "Undirected", category: "혈연", label: "형제_황위계승", desc: "송나라 건국 동지이자 훗날 황위를 잇는 형제" },
+        { id: "E23", source: "N03", target: "N23", type: "Directed", category: "혈연", label: "모자_금궤지맹", desc: "'금궤지맹(형제 간 황위 계승 유언)'을 남긴 어머니" },
+        { id: "E24", source: "N03", target: "N24", type: "Undirected", category: "혼인", label: "부부_황제와황후", desc: "북송 초대 황제와 황후" },
+        { id: "E25", source: "N03", target: "N19", type: "Directed", category: "군신", label: "책사_개국공신", desc: "진교의 변과 송나라 통치 체제를 설계한 핵심 참모" },
+        { id: "E26", source: "N03", target: "N20", type: "Undirected", category: "의형제", label: "의형제_배주석병권", desc: "함께 거병한 의형제이자 '배주석병권'으로 병권을 반납한 장수" },
+        { id: "E27", source: "N09", target: "N23", type: "Directed", category: "혈연", label: "모자", desc: "두태후의 유언을 명분으로 형에 이어 황위에 오름" },
+        { id: "E28", source: "N09", target: "N01", type: "Directed", category: "외교", label: "귀순수용_납토귀송완결", desc: "송 태종 즉위 후 전홍숙의 최종적인 '납토귀송'을 받아들임" },
+        { id: "E29", source: "N04", target: "N08", type: "Directed", category: "혈연", label: "양부자_황위계승", desc: "후주 태조 곽위의 양자로서 황위를 계승" },
+        { id: "E30", source: "N04", target: "N21", type: "Directed", category: "군신", label: "책사_개혁동지", desc: "후주의 부국강병과 천하통일 전략('평변책')을 함께 추진" },
+        { id: "E31", source: "N04", target: "N22", type: "Undirected", category: "혼인", label: "부부_황제와황후", desc: "후주 세종과 황후" },
+        { id: "E32", source: "N08", target: "N12", type: "Undirected", category: "정변", label: "군신결렬_후주건국", desc: "후한 황제의 숙청에 반발해 곽위가 거병, 후주를 건국" },
+        { id: "E33", source: "N04", target: "N25", type: "Undirected", category: "전쟁", label: "남당정벌_신하칭신", desc: "후주 군대가 남당을 격파하여 이경이 황제 칭호를 포기하고 신하를 칭함" },
+        { id: "E34", source: "N01", target: "N25", type: "Undirected", category: "외교", label: "주변국견제", desc: "인접국 남당과 오월 간의 복잡한 외교·군사적 신경전" },
+        { id: "E35", source: "N01", target: "N26", type: "Undirected", category: "외교", label: "강남군주_동병상련", desc: "송나라의 통일 압박 속에서 각기 다른 방식으로 귀순한 강남의 두 군주" },
+        { id: "E36", source: "N03", target: "N26", type: "Directed", category: "전쟁", label: "남당정복_항복수용", desc: "조광윤의 남당 정벌로 이욱이 항복하고 송의 신하가 됨" },
+        { id: "E37", source: "N25", target: "N26", type: "Directed", category: "혈연", label: "부자_왕위계승", desc: "남당 중주 이경의 뒤를 이어 아들 이욱이 즉위" },
+        { id: "E38", source: "N02", target: "N13", type: "Directed", category: "혼인", label: "고부관계", desc: "오월 왕실 내 전홍숙을 함께 지지하는 여성 어른과 왕비" }
+      ];
+
+      // =====================================================================
+      // 2. 상태 및 초기 좌표 세팅 (결정론적 클러스터링 배치)
+      // =====================================================================
+      const wrap = document.getElementById("canvas-wrap");
+      let width = wrap.clientWidth || window.innerWidth;
+      let height = wrap.clientHeight || window.innerHeight;
+
+      const FACTION_ANCHORS = {
+        "오월": { rx: 0.38, ry: 0.54 },
+        "북송": { rx: 0.65, ry: 0.36 },
+        "후주": { rx: 0.52, ry: 0.24 },
+        "남당": { rx: 0.50, ry: 0.78 },
+        "후한": { rx: 0.72, ry: 0.18 }
+      };
+
+      const nodes = RAW_NODES.map((n, idx) => {
+        const len = n.hanja.length;
+        // 한자 길이에 맞춰 원 반지름을 충분히 크게 계산하여 잘림 방지
+        let radius = 24;
+        if (n.tier === 1) {
+          radius = len >= 3 ? 35 : 31;
+        } else if (n.tier === 2) {
+          radius = len >= 3 ? 29 : 25;
+        } else {
+          radius = len === 4 ? 28 : (len === 3 ? 27 : 22);
+        }
+
+        const anchor = FACTION_ANCHORS[n.faction] || { rx: 0.5, ry: 0.5 };
+        const angle = (idx * 2.39996); // 골든 앵글 분포
+        const spread = n.tier === 1 ? 24 : (n.tier === 2 ? 75 : 125);
+
+        return {
+          ...n,
+          radius,
+          degree: RAW_EDGES.filter(e => e.source === n.id || e.target === n.id).length,
+          x: width * anchor.rx + Math.cos(angle) * spread,
+          y: height * anchor.ry + Math.sin(angle) * spread,
+          vx: 0,
+          vy: 0,
+          pinned: false
+        };
+      });
+
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+      // 동일 노드 쌍 사이의 복수 엣지 곡률 오프셋 계산
+      const pairCount = {};
+      const edges = RAW_EDGES.map(e => {
+        const key = [e.source, e.target].sort().join("-");
+        pairCount[key] = (pairCount[key] || 0) + 1;
+        return {
+          ...e,
+          sourceNode: nodeMap.get(e.source),
+          targetNode: nodeMap.get(e.target),
+          pairIndex: pairCount[key]
+        };
+      });
+      edges.forEach(e => {
+        const key = [e.source, e.target].sort().join("-");
+        e.pairTotal = pairCount[key];
+      });
+
+      const state = {
+        faction: "전체",
+        relation: "전체",
+        selectedNodeId: null,
+        selectedEdgeId: null,
+        hoveredNodeId: null,
+        hoveredEdgeId: null,
+        showNodeLabels: true,
+        showEdgeLabels: false,
+        physicsPaused: false,
+        transform: { x: 0, y: 0, k: 1 }
+      };
+
+      // =====================================================================
+      // 3. 인라인 SVG DOM 생성
+      // =====================================================================
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const svg = document.getElementById("network-svg");
+
+      function createSvgEl(tag, attrs = {}) {
+        const el = document.createElementNS(SVG_NS, tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          el.setAttribute(k, v);
+        }
+        return el;
+      }
+
+      // 화살표 마커 정의
+      const defs = createSvgEl("defs");
+      Object.entries(RELATIONS).forEach(([cat, cfg]) => {
+        const marker = createSvgEl("marker", {
+          id: `arrow-${cat}`,
+          viewBox: "0 -5 10 10",
+          refX: "9.5",
+          refY: "0",
+          markerWidth: "6",
+          markerHeight: "6",
+          orient: "auto"
+        });
+        marker.appendChild(createSvgEl("path", {
+          d: "M0,-4.2 L10,0 L0,4.2 Z",
+          fill: cfg.color
+        }));
+        defs.appendChild(marker);
+      });
+      svg.appendChild(defs);
+
+      const viewport = createSvgEl("g", { id: "svg-viewport" });
+      const edgeLayer = createSvgEl("g", { id: "edge-layer" });
+      const edgeLabelLayer = createSvgEl("g", { id: "edge-label-layer" });
+      const nodeLayer = createSvgEl("g", { id: "node-layer" });
+
+      viewport.appendChild(edgeLayer);
+      viewport.appendChild(edgeLabelLayer);
+      viewport.appendChild(nodeLayer);
+      svg.appendChild(viewport);
+
+      // 엣지 DOM 구축
+      edges.forEach(edge => {
+        const rCfg = RELATIONS[edge.category] || RELATIONS["전체"];
+
+        const visPath = createSvgEl("path", {
+          class: "svg-edge-vis",
+          stroke: rCfg.color,
+          "stroke-width": edge.type === "Directed" ? "1.8" : "2.1",
+          "stroke-dasharray": rCfg.dashed ? "5,4" : "none"
+        });
+        if (edge.type === "Directed") {
+          visPath.setAttribute("marker-end", `url(#arrow-${edge.category})`);
+        }
+
+        const hitPath = createSvgEl("path", {
+          class: "svg-edge-hit"
+        });
+
+        hitPath.addEventListener("mouseenter", (ev) => {
+          state.hoveredEdgeId = edge.id;
+          showEdgeTooltip(ev, edge);
+          refreshStyles();
+        });
+        hitPath.addEventListener("mousemove", moveTooltip);
+        hitPath.addEventListener("mouseleave", () => {
+          state.hoveredEdgeId = null;
+          hideTooltip();
+          refreshStyles();
+        });
+        hitPath.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          selectEdge(edge.id);
+        });
+
+        const lbl = createSvgEl("text", {
+          class: "svg-edge-label",
+          fill: rCfg.color
+        });
+        lbl.textContent = edge.label.replace(/_/g, " · ");
+
+        edgeLayer.appendChild(visPath);
+        edgeLayer.appendChild(hitPath);
+        edgeLabelLayer.appendChild(lbl);
+
+        edge.visEl = visPath;
+        edge.hitEl = hitPath;
+        edge.labelEl = lbl;
+      });
+
+      // 노드 DOM 구축 (2~4글자 한자 전체 표시)
+      nodes.forEach(node => {
+        const fCfg = FACTIONS[node.faction] || FACTIONS["전체"];
+        const g = createSvgEl("g", { class: "svg-node" });
+
+        // 주인공 펄스 링
+        const pulse = createSvgEl("circle", {
+          class: "halo-pulse",
+          r: node.radius + 5,
+          fill: "none",
+          stroke: fCfg.color,
+          "stroke-width": "2"
+        });
+        pulse.style.display = (node.id === "N01" || node.id === "N03") ? "block" : "none";
+        g.appendChild(pulse);
+        node.pulseEl = pulse;
+
+        // 주요 군주 이중 테두리
+        if (node.tier === 1) {
+          g.appendChild(createSvgEl("circle", {
+            r: node.radius + 4,
+            fill: "none",
+            stroke: "#fbbf24",
+            "stroke-width": "1.2",
+            "stroke-dasharray": "3,2",
+            opacity: "0.9"
+          }));
+        }
+
+        // 메인 원
+        const circle = createSvgEl("circle", {
+          r: node.radius,
+          fill: fCfg.fill,
+          stroke: fCfg.color,
+          "stroke-width": node.tier === 1 ? "3" : "2.2"
+        });
+        g.appendChild(circle);
+        node.circleEl = circle;
+
+        // 한자 풀네임 텍스트 (2글자, 3글자, 4글자 분기)
+        const hLen = node.hanja.length;
+        if (hLen === 4) {
+          // 4글자 (예: 水丘昭券) -> 2줄 2글자씩 중앙 정렬
+          const tTop = createSvgEl("text", {
+            "text-anchor": "middle",
+            y: "-3",
+            fill: "#f8fafc",
+            "font-family": "var(--font-serif)",
+            "font-weight": "700",
+            "font-size": "11.5px",
+            "letter-spacing": "0.5px",
+            "pointer-events": "none"
+          });
+          tTop.textContent = node.hanja.slice(0, 2);
+
+          const tBot = createSvgEl("text", {
+            "text-anchor": "middle",
+            y: "11",
+            fill: "#f8fafc",
+            "font-family": "var(--font-serif)",
+            "font-weight": "700",
+            "font-size": "11.5px",
+            "letter-spacing": "0.5px",
+            "pointer-events": "none"
+          });
+          tBot.textContent = node.hanja.slice(2, 4);
+
+          g.appendChild(tTop);
+          g.appendChild(tBot);
+        } else {
+          // 2글자 또는 3글자 -> 한 줄에 전체 표기
+          const fontSize = node.tier === 1
+            ? (hLen === 3 ? "14px" : "15px")
+            : (hLen === 3 ? "12px" : "13px");
+
+          const hText = createSvgEl("text", {
+            "text-anchor": "middle",
+            dy: "0.36em",
+            fill: "#f8fafc",
+            "font-family": "var(--font-serif)",
+            "font-weight": "700",
+            "font-size": fontSize,
+            "pointer-events": "none"
+          });
+          hText.textContent = node.hanja;
+          g.appendChild(hText);
+        }
+
+        // 하단 한글 이름 라벨 (어두운 외곽선 후광으로 겹침 가독성 확보)
+        const nameGroup = createSvgEl("g", {
+          transform: `translate(0, ${node.radius + 15})`,
+          "pointer-events": "none"
+        });
+        const kText = createSvgEl("text", {
+          "text-anchor": "middle",
+          fill: "#f8fafc",
+          "font-size": node.tier === 1 ? "12.5px" : "11.5px",
+          "font-weight": node.tier === 1 ? "700" : "600",
+          "paint-order": "stroke",
+          stroke: "#0d1117",
+          "stroke-width": "4px",
+          "stroke-linejoin": "round"
+        });
+        kText.textContent = node.name;
+        nameGroup.appendChild(kText);
+        g.appendChild(nameGroup);
+        node.labelGroupEl = nameGroup;
+
+        // 노드 마우스 이벤트
+        g.addEventListener("mouseenter", (ev) => {
+          state.hoveredNodeId = node.id;
+          showNodeTooltip(ev, node);
+          refreshStyles();
+        });
+        g.addEventListener("mousemove", moveTooltip);
+        g.addEventListener("mouseleave", () => {
+          state.hoveredNodeId = null;
+          hideTooltip();
+          refreshStyles();
+        });
+
+        nodeLayer.appendChild(g);
+        node.groupEl = g;
+      });
+
+      // =====================================================================
+      // 4. 커스텀 물리 시뮬레이션 & 위치 업데이트
+      // =====================================================================
+      function updatePositions() {
+        // 엣지 경로 계산
+        edges.forEach(e => {
+          const s = e.sourceNode;
+          const t = e.targetNode;
+          const dx = t.x - s.x;
+          const dy = t.y - s.y;
+          const dist = Math.hypot(dx, dy) || 1;
+
+          const startPad = s.radius + 2;
+          const endPad = t.radius + (e.type === "Directed" ? 6 : 2);
+
+          const r1 = Math.min(startPad / dist, 0.45);
+          const r2 = Math.max(1 - endPad / dist, 0.55);
+
+          const x1 = s.x + dx * r1;
+          const y1 = s.y + dy * r1;
+          const x2 = s.x + dx * r2;
+          const y2 = s.y + dy * r2;
+
+          let curve = 0;
+          if (e.pairTotal > 1) {
+            curve = (e.pairIndex === 1 ? 1 : -1) * 32;
+          } else if (e.type === "Directed") {
+            curve = 20;
+          }
+
+          let dStr = "";
+          if (curve === 0) {
+            e.lx = (x1 + x2) * 0.5;
+            e.ly = (y1 + y2) * 0.5;
+            dStr = `M${x1.toFixed(1)},${y1.toFixed(1)} L${x2.toFixed(1)},${y2.toFixed(1)}`;
+          } else {
+            const mx = (x1 + x2) * 0.5;
+            const my = (y1 + y2) * 0.5;
+            const nx = -dy / dist;
+            const ny = dx / dist;
+            const cx = mx + nx * curve;
+            const cy = my + ny * curve;
+            e.lx = 0.25 * x1 + 0.5 * cx + 0.25 * x2;
+            e.ly = 0.25 * y1 + 0.5 * cy + 0.25 * y2;
+            dStr = `M${x1.toFixed(1)},${y1.toFixed(1)} Q${cx.toFixed(1)},${cy.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`;
+          }
+
+          e.visEl.setAttribute("d", dStr);
+          e.hitEl.setAttribute("d", dStr);
+          e.labelEl.setAttribute("x", e.lx.toFixed(1));
+          e.labelEl.setAttribute("y", (e.ly - 4).toFixed(1));
+        });
+
+        // 노드 좌표 적용
+        nodes.forEach(n => {
+          n.groupEl.setAttribute("transform", `translate(${n.x.toFixed(1)}, ${n.y.toFixed(1)})`);
+        });
+      }
+
+      let simAlpha = 1.0;
+      function stepSimulation() {
+        if (!state.physicsPaused && simAlpha > 0.004) {
+          const repulsion = 5200;
+          const damping = 0.82;
+
+          // 1) 노드 간 반발력 + 충돌 방지
+          for (let i = 0; i < nodes.length; i++) {
+            const a = nodes[i];
+            for (let j = i + 1; j < nodes.length; j++) {
+              const b = nodes[j];
+              let dx = b.x - a.x;
+              let dy = b.y - a.y;
+              let dist = Math.hypot(dx, dy) || 0.1;
+              const minDist = a.radius + b.radius + 36;
+
+              // 쿨롱 반발력
+              const force = (repulsion / (dist * dist)) * simAlpha;
+              const fx = (dx / dist) * force;
+              const fy = (dy / dist) * force;
+
+              if (!a.pinned) { a.vx -= fx; a.vy -= fy; }
+              if (!b.pinned) { b.vx += fx; b.vy += fy; }
+
+              // 겹침 해소
+              if (dist < minDist) {
+                const overlap = (minDist - dist) * 0.25;
+                const ox = (dx / dist) * overlap;
+                const oy = (dy / dist) * overlap;
+                if (!a.pinned) { a.x -= ox; a.y -= oy; }
+                if (!b.pinned) { b.x += ox; b.y += oy; }
+              }
+            }
+          }
+
+          // 2) 엣지 스프링 인력
+          edges.forEach(e => {
+            const s = e.sourceNode;
+            const t = e.targetNode;
+            const dx = t.x - s.x;
+            const dy = t.y - s.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const targetDist = (e.category === "혼인" || e.category === "혈연") ? 130 : 175;
+            const diff = (dist - targetDist) * 0.035 * simAlpha;
+            const fx = (dx / dist) * diff;
+            const fy = (dy / dist) * diff;
+
+            if (!s.pinned) { s.vx += fx; s.vy += fy; }
+            if (!t.pinned) { t.vx -= fx; t.vy -= fy; }
+          });
+
+          // 3) 세력 클러스터 인력 (화면 중앙 균형 유지)
+          nodes.forEach(n => {
+            if (n.pinned) return;
+            const anchor = FACTION_ANCHORS[n.faction] || { rx: 0.5, ry: 0.5 };
+            const tx = width * anchor.rx;
+            const ty = height * anchor.ry;
+            n.vx += (tx - n.x) * 0.018 * simAlpha;
+            n.vy += (ty - n.y) * 0.018 * simAlpha;
+
+            n.vx *= damping;
+            n.vy *= damping;
+            n.x += n.vx;
+            n.y += n.vy;
+          });
+
+          simAlpha *= 0.992;
+          updatePositions();
+        }
+        requestAnimationFrame(stepSimulation);
+      }
+
+      // 초기 안정화를 위해 90스텝 사전 계산 후 렌더
+      for (let k = 0; k < 90; k++) {
+        simAlpha = 0.85;
+        for (let i = 0; i < nodes.length; i++) {
+          for (let j = i + 1; j < nodes.length; j++) {
+            const a = nodes[i], b = nodes[j];
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const dist = Math.hypot(dx, dy) || 0.1;
+            const minDist = a.radius + b.radius + 36;
+            if (dist < minDist) {
+              const push = (minDist - dist) * 0.35;
+              a.x -= (dx / dist) * push;
+              a.y -= (dy / dist) * push;
+              b.x += (dx / dist) * push;
+              b.y += (dy / dist) * push;
+            }
+          }
+        }
+      }
+      simAlpha = 0.65;
+      updatePositions();
+      requestAnimationFrame(stepSimulation);
+
+      // =====================================================================
+      // 5. 팬/줌 및 노드 드래그 인터랙션
+      // =====================================================================
+      function applyTransform() {
+        const { x, y, k } = state.transform;
+        viewport.setAttribute("transform", `translate(${x.toFixed(1)}, ${y.toFixed(1)}) scale(${k.toFixed(3)})`);
+      }
+
+      let isPanning = false;
+      let panStart = { x: 0, y: 0 };
+      let draggingNode = null;
+      let dragMoved = false;
+
+      nodes.forEach(node => {
+        node.groupEl.addEventListener("pointerdown", (ev) => {
+          ev.stopPropagation();
+          draggingNode = node;
+          dragMoved = false;
+          node.pinned = true;
+          node.groupEl.setPointerCapture(ev.pointerId);
+        });
+
+        node.groupEl.addEventListener("pointermove", (ev) => {
+          if (!draggingNode || draggingNode.id !== node.id) return;
+          dragMoved = true;
+          const rect = svg.getBoundingClientRect();
+          const mx = (ev.clientX - rect.left - state.transform.x) / state.transform.k;
+          const my = (ev.clientY - rect.top - state.transform.y) / state.transform.k;
+          node.x = mx;
+          node.y = my;
+          node.vx = 0;
+          node.vy = 0;
+          if (!state.physicsPaused) simAlpha = Math.max(simAlpha, 0.25);
+          updatePositions();
+        });
+
+        node.groupEl.addEventListener("pointerup", (ev) => {
+          if (!draggingNode || draggingNode.id !== node.id) return;
+          node.groupEl.releasePointerCapture(ev.pointerId);
+          if (!state.physicsPaused) node.pinned = false;
+          draggingNode = null;
+          if (!dragMoved) {
+            selectNode(node.id);
+          }
+        });
+      });
+
+      svg.addEventListener("pointerdown", (ev) => {
+        if (ev.target === svg) {
+          isPanning = true;
+          svg.classList.add("panning");
+          panStart = { x: ev.clientX - state.transform.x, y: ev.clientY - state.transform.y };
+        }
+      });
+
+      window.addEventListener("pointermove", (ev) => {
+        if (!isPanning) return;
+        state.transform.x = ev.clientX - panStart.x;
+        state.transform.y = ev.clientY - panStart.y;
+        applyTransform();
+      });
+
+      window.addEventListener("pointerup", (ev) => {
+        if (isPanning) {
+          isPanning = false;
+          svg.classList.remove("panning");
+          // 드래그가 아닌 단순 배경 클릭 시 선택 해제
+          if (Math.hypot(ev.clientX - panStart.x - state.transform.x, ev.clientY - panStart.y - state.transform.y) < 4) {
+            clearSelection();
+          }
+        }
+      });
+
+      svg.addEventListener("wheel", (ev) => {
+        ev.preventDefault();
+        const factor = ev.deltaY < 0 ? 1.12 : 0.89;
+        zoomAt(ev.clientX, ev.clientY, factor);
+      }, { passive: false });
+
+      function zoomAt(clientX, clientY, factor) {
+        const rect = svg.getBoundingClientRect();
+        const mx = clientX - rect.left;
+        const my = clientY - rect.top;
+        const newK = Math.min(Math.max(state.transform.k * factor, 0.35), 3.2);
+        const ratio = newK / state.transform.k;
+        state.transform.x = mx - (mx - state.transform.x) * ratio;
+        state.transform.y = my - (my - state.transform.y) * ratio;
+        state.transform.k = newK;
+        applyTransform();
+      }
+
+      // =====================================================================
+      // 6. 필터링 & 하이라이트 스타일 동기화
+      // =====================================================================
+      function matchEdge(edge) {
+        const fOk = state.faction === "전체" ||
+          edge.sourceNode.faction === state.faction ||
+          edge.targetNode.faction === state.faction;
+        const rOk = state.relation === "전체" || edge.category === state.relation;
+        return fOk && rOk;
+      }
+
+      function matchNode(node) {
+        if (state.faction !== "전체" && node.faction !== state.faction) return false;
+        if (state.relation === "전체") return true;
+        return edges.some(e => (e.source === node.id || e.target === node.id) && e.category === state.relation);
+      }
+
+      function refreshStyles() {
+        const focusNode = state.hoveredNodeId || state.selectedNodeId;
+        const focusEdge = state.hoveredEdgeId || state.selectedEdgeId;
+
+        const neighborNodes = new Set();
+        const activeEdges = new Set();
+
+        if (focusNode) {
+          neighborNodes.add(focusNode);
+          edges.forEach(e => {
+            if ((e.source === focusNode || e.target === focusNode) && matchEdge(e)) {
+              neighborNodes.add(e.source);
+              neighborNodes.add(e.target);
+              activeEdges.add(e.id);
+            }
+          });
+        } else if (focusEdge) {
+          const edge = edges.find(e => e.id === focusEdge);
+          if (edge) {
+            neighborNodes.add(edge.source);
+            neighborNodes.add(edge.target);
+            activeEdges.add(edge.id);
+          }
+        }
+
+        nodes.forEach(n => {
+          const visible = matchNode(n);
+          let op = 1;
+          if (!visible) op = 0.08;
+          else if (focusNode || focusEdge) op = neighborNodes.has(n.id) ? 1 : 0.14;
+
+          n.groupEl.style.opacity = op;
+          n.circleEl.setAttribute("stroke-width", (n.id === state.selectedNodeId || n.id === state.hoveredNodeId) ? "4" : (n.tier === 1 ? "3" : "2.2"));
+          n.pulseEl.style.display = (n.id === state.selectedNodeId || (!state.selectedNodeId && (n.id === "N01" || n.id === "N03"))) ? "block" : "none";
+          n.labelGroupEl.style.display = (state.showNodeLabels || neighborNodes.has(n.id)) ? "block" : "none";
+        });
+
+        edges.forEach(e => {
+          const visible = matchEdge(e);
+          let op = 0.7;
+          let sw = e.type === "Directed" ? 1.8 : 2.1;
+
+          if (!visible) {
+            op = 0.04;
+          } else if (focusNode || focusEdge) {
+            if (activeEdges.has(e.id)) {
+              op = 0.98;
+              sw = (e.id === state.selectedEdgeId || e.id === state.hoveredEdgeId) ? 3.6 : 2.8;
+            } else {
+              op = 0.06;
+            }
+          }
+
+          e.visEl.style.opacity = op;
+          e.visEl.setAttribute("stroke-width", sw);
+
+          const showLbl = visible && (state.showEdgeLabels || ((focusNode || focusEdge) && activeEdges.has(e.id)));
+          e.labelEl.style.display = showLbl ? "block" : "none";
+        });
+      }
+
+      // =====================================================================
+      // 7. 사이드바 필터, 인스펙터, 검색 및 툴팁 UI
+      // =====================================================================
+      function renderSidebarFilters() {
+        const fList = document.getElementById("faction-list");
+        fList.innerHTML = "";
+        Object.entries(FACTIONS).forEach(([name, cfg]) => {
+          const cnt = name === "전체" ? nodes.length : nodes.filter(n => n.faction === name).length;
+          const btn = document.createElement("button");
+          btn.className = `filter-chip ${state.faction === name ? "selected" : ""}`;
+          if (state.faction === name) btn.style.borderColor = cfg.color;
+          btn.innerHTML = `
+            <span style="display:flex;align-items:center;gap:6px;">
+              <span class="dot" style="background:${cfg.color}"></span>
+              <span>${name}</span>
+            </span>
+            <span style="font-size:11px;color:#94a3b8;">${cnt}</span>
+          `;
+          btn.onclick = () => {
+            state.faction = name;
+            document.getElementById("badge-faction").textContent = `${name} (${cnt}인)`;
+            renderSidebarFilters();
+            refreshStyles();
+          };
+          fList.appendChild(btn);
+        });
+
+        const rList = document.getElementById("relation-list");
+        rList.innerHTML = "";
+        Object.entries(RELATIONS).forEach(([cat, cfg]) => {
+          const cnt = cat === "전체" ? edges.length : edges.filter(e => e.category === cat).length;
+          const btn = document.createElement("button");
+          btn.className = `rel-chip ${state.relation === cat ? "selected" : ""}`;
+          if (state.relation === cat) btn.style.borderColor = cfg.color;
+          btn.innerHTML = `
+            <span class="dot" style="background:${cfg.color}"></span>
+            <span>${cat}</span>
+            <span style="color:#94a3b8;">${cnt}</span>
+          `;
+          btn.onclick = () => {
+            state.relation = cat;
+            document.getElementById("badge-relation").textContent = `${cat} (${cnt}개)`;
+            renderSidebarFilters();
+            refreshStyles();
+          };
+          rList.appendChild(btn);
+        });
+      }
+
+      function selectNode(nodeId) {
+        const node = nodeMap.get(nodeId);
+        if (!node) return;
+        state.selectedNodeId = nodeId;
+        state.selectedEdgeId = null;
+        refreshStyles();
+
+        const fCfg = FACTIONS[node.faction];
+        const connected = edges.filter(e => e.source === nodeId || e.target === nodeId);
+
+        document.getElementById("insp-tag").textContent = `인물 프로필 · ${node.id}`;
+        document.getElementById("insp-body").innerHTML = `
+          <div class="insp-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;background:${fCfg.bg};color:${fCfg.color};border:1px solid ${fCfg.color}66;">
+                ${node.faction} 세력
+              </span>
+              <span style="font-size:11px;color:#94a3b8;">연결 관계 <strong style="color:#fde68a;">${connected.length}건</strong></span>
+            </div>
+            <div style="font-family:var(--font-serif);font-size:20px;font-weight:700;color:#fff;margin-top:10px;">
+              ${node.name}
+            </div>
+            <div style="font-family:var(--font-serif);font-size:14px;color:#fde68a;margin-top:2px;">
+              ${node.hanja}
+            </div>
+            <p style="font-size:12px;color:#cbd5e1;line-height:1.5;margin-top:10px;background:rgba(13,17,23,0.65);padding:9px;border-radius:8px;">
+              ${node.role}
+            </p>
+          </div>
+
+          <div class="sec-header">
+            <span class="sec-title">연결된 인물 관계 (${connected.length})</span>
+            <span class="sec-badge">클릭 시 이동</span>
+          </div>
+          <div>
+            ${connected.map(e => {
+              const isOut = e.source === nodeId;
+              const other = isOut ? e.targetNode : e.sourceNode;
+              const oCfg = FACTIONS[other.faction];
+              const rCfg = RELATIONS[e.category];
+              const dirStr = e.type === "Directed" ? (isOut ? "→ 나가는 관계" : "← 들어오는 관계") : "↔ 양방향";
+              return `
+                <div class="rel-item-card" onclick="window.__focusNode('${other.id}')">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+                    <span style="font-size:12.5px;font-weight:700;color:#f8fafc;display:flex;align-items:center;gap:6px;">
+                      <span class="dot" style="background:${oCfg.color}"></span>
+                      ${other.name} <span style="font-weight:400;color:#94a3b8;font-size:11px;">(${other.hanja})</span>
+                    </span>
+                    <span style="font-size:10px;color:#94a3b8;background:#0d1117;padding:2px 6px;border-radius:5px;">${dirStr}</span>
+                  </div>
+                  <div style="margin-top:6px;display:flex;align-items:center;gap:6px;">
+                    <span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:${rCfg.color}25;color:${rCfg.color};">${e.category}</span>
+                    <span style="font-size:12px;font-weight:600;color:#e2e8f0;">${e.label.replace(/_/g, " · ")}</span>
+                  </div>
+                  <p style="font-size:11px;color:#94a3b8;margin-top:5px;line-height:1.4;">${e.desc}</p>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        `;
+        document.getElementById("right-inspector").classList.add("open");
+      }
+
+      function selectEdge(edgeId) {
+        const edge = edges.find(e => e.id === edgeId);
+        if (!edge) return;
+        state.selectedEdgeId = edgeId;
+        state.selectedNodeId = null;
+        refreshStyles();
+
+        const rCfg = RELATIONS[edge.category];
+        const s = edge.sourceNode;
+        const t = edge.targetNode;
+
+        document.getElementById("insp-tag").textContent = `관계 상세 정보 · ${edge.id}`;
+        document.getElementById("insp-body").innerHTML = `
+          <div class="insp-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;background:${rCfg.color}25;color:${rCfg.color};border:1px solid ${rCfg.color}66;">
+                ${edge.category}
+              </span>
+              <span style="font-size:11px;color:#94a3b8;">
+                ${edge.type === "Directed" ? "단방향 (Directed →)" : "양방향 (Undirected ↔)"}
+              </span>
+            </div>
+            <div style="font-family:var(--font-serif);font-size:17px;font-weight:700;color:#fde68a;margin-top:10px;">
+              ${edge.label.replace(/_/g, " · ")}
+            </div>
+
+            <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">
+              <div class="rel-item-card" style="margin:0;" onclick="window.__focusNode('${s.id}')">
+                <div style="font-size:10px;color:#94a3b8;">${edge.type === "Directed" ? "출발 인물 (Source)" : "인물 A"}</div>
+                <div style="font-size:13.5px;font-weight:700;color:#fff;margin-top:2px;">
+                  ${s.name} <span style="font-weight:400;color:#fde68a;">(${s.hanja})</span> · <span style="font-size:11px;color:${FACTIONS[s.faction].color};">${s.faction}</span>
+                </div>
+              </div>
+              <div style="text-align:center;color:${rCfg.color};font-weight:700;font-size:13px;">
+                ${edge.type === "Directed" ? "⬇" : "⇕"}
+              </div>
+              <div class="rel-item-card" style="margin:0;" onclick="window.__focusNode('${t.id}')">
+                <div style="font-size:10px;color:#94a3b8;">${edge.type === "Directed" ? "도착 인물 (Target)" : "인물 B"}</div>
+                <div style="font-size:13.5px;font-weight:700;color:#fff;margin-top:2px;">
+                  ${t.name} <span style="font-weight:400;color:#fde68a;">(${t.hanja})</span> · <span style="font-size:11px;color:${FACTIONS[t.faction].color};">${t.faction}</span>
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(148,163,184,0.18);">
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">작중 및 역사적 서사</div>
+              <p style="font-size:12px;color:#e2e8f0;line-height:1.5;background:rgba(13,17,23,0.65);padding:9px;border-radius:8px;">
+                ${edge.desc}
+              </p>
+            </div>
+          </div>
+        `;
+        document.getElementById("right-inspector").classList.add("open");
+      }
+
+      function clearSelection() {
+        state.selectedNodeId = null;
+        state.selectedEdgeId = null;
+        document.getElementById("right-inspector").classList.remove("open");
+        refreshStyles();
+      }
+
+      window.__focusNode = function (nodeId) {
+        const node = nodeMap.get(nodeId);
+        if (!node) return;
+        if (!matchNode(node)) {
+          state.faction = "전체";
+          state.relation = "전체";
+          document.getElementById("badge-faction").textContent = "전체 26인";
+          document.getElementById("badge-relation").textContent = "전체 38개";
+          renderSidebarFilters();
+        }
+        selectNode(nodeId);
+        const targetK = 1.35;
+        state.transform.k = targetK;
+        state.transform.x = width * 0.5 - node.x * targetK;
+        state.transform.y = height * 0.5 - node.y * targetK;
+        applyTransform();
+      };
+
+      // 툴팁 제어
+      const tooltipEl = document.getElementById("tooltip");
+      function showNodeTooltip(ev, n) {
+        const fCfg = FACTIONS[n.faction];
+        tooltipEl.innerHTML = `
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+            <span class="dot" style="background:${fCfg.color}"></span>
+            <strong>${n.name}</strong>
+            <span style="color:#fde68a;">(${n.hanja})</span>
+          </div>
+          <div style="font-size:11px;color:${fCfg.color};margin-bottom:3px;">${n.faction} 세력 · 연결 ${n.degree}건</div>
+          <div style="font-size:11px;color:#cbd5e1;">${n.role}</div>
+        `;
+        tooltipEl.style.display = "block";
+        moveTooltip(ev);
+      }
+
+      function showEdgeTooltip(ev, e) {
+        const rCfg = RELATIONS[e.category];
+        const sym = e.type === "Directed" ? "→" : "↔";
+        tooltipEl.innerHTML = `
+          <div style="font-weight:700;margin-bottom:3px;">
+            ${e.sourceNode.name} <span style="color:${rCfg.color}">${sym}</span> ${e.targetNode.name}
+          </div>
+          <div style="font-size:11px;color:${rCfg.color};font-weight:700;margin-bottom:3px;">
+            [${e.category}] ${e.label.replace(/_/g, " · ")}
+          </div>
+          <div style="font-size:11px;color:#cbd5e1;">${e.desc}</div>
+        `;
+        tooltipEl.style.display = "block";
+        moveTooltip(ev);
+      }
+
+      function moveTooltip(ev) {
+        let left = ev.clientX + 14;
+        let top = ev.clientY + 14;
+        if (left + 265 > window.innerWidth) left = ev.clientX - 265;
+        if (top + 100 > window.innerHeight) top = ev.clientY - 100;
+        tooltipEl.style.left = `${left}px`;
+        tooltipEl.style.top = `${top}px`;
+      }
+
+      function hideTooltip() {
+        tooltipEl.style.display = "none";
+      }
+
+      // 검색창 이벤트
+      const searchInput = document.getElementById("search-input");
+      const searchDrop = document.getElementById("search-dropdown");
+      const clearBtn = document.getElementById("clear-search");
+
+      searchInput.addEventListener("input", () => {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) {
+          searchDrop.style.display = "none";
+          clearBtn.style.display = "none";
+          return;
+        }
+        clearBtn.style.display = "block";
+        const hits = nodes.filter(n =>
+          n.name.toLowerCase().includes(q) ||
+          n.hanja.toLowerCase().includes(q) ||
+          n.role.toLowerCase().includes(q) ||
+          n.faction.toLowerCase().includes(q)
+        );
+        if (hits.length === 0) {
+          searchDrop.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">일치하는 인물이 없습니다.</div>`;
+        } else {
+          searchDrop.innerHTML = hits.map(m => {
+            const fCfg = FACTIONS[m.faction];
+            return `
+              <div class="search-item" onclick="window.__focusNode('${m.id}');document.getElementById('search-dropdown').style.display='none';">
+                <div>
+                  <div style="font-size:12.5px;font-weight:700;color:#fff;">${m.name} <span style="color:#fde68a;font-weight:400;">(${m.hanja})</span></div>
+                  <div style="font-size:10.5px;color:#94a3b8;">${m.role}</div>
+                </div>
+                <span style="font-size:10px;padding:2px 7px;border-radius:99px;background:${fCfg.bg};color:${fCfg.color};flex-shrink:0;">${m.faction}</span>
+              </div>
+            `;
+          }).join("");
+        }
+        searchDrop.style.display = "block";
+      });
+
+      clearBtn.addEventListener("click", () => {
+        searchInput.value = "";
+        searchDrop.style.display = "none";
+        clearBtn.style.display = "none";
+      });
+
+      document.addEventListener("click", (ev) => {
+        if (!searchInput.contains(ev.target) && !searchDrop.contains(ev.target)) {
+          searchDrop.style.display = "none";
+        }
+      });
+
+      // 버튼 이벤트 바인딩
+      document.getElementById("btn-toggle-sidebar").addEventListener("click", (ev) => {
+        const sb = document.getElementById("left-sidebar");
+        sb.classList.toggle("collapsed");
+        ev.currentTarget.classList.toggle("active", !sb.classList.contains("collapsed"));
+      });
+
+      document.getElementById("btn-close-insp").addEventListener("click", clearSelection);
+
+      document.getElementById("btn-zoom-in").addEventListener("click", () => {
+        zoomAt(width * 0.5, height * 0.5, 1.25);
+      });
+
+      document.getElementById("btn-zoom-out").addEventListener("click", () => {
+        zoomAt(width * 0.5, height * 0.5, 0.8);
+      });
+
+      document.getElementById("btn-reset-view").addEventListener("click", () => {
+        state.transform = { x: 0, y: 0, k: 1 };
+        applyTransform();
+      });
+
+      document.getElementById("btn-toggle-physics").addEventListener("click", (ev) => {
+        state.physicsPaused = !state.physicsPaused;
+        if (state.physicsPaused) {
+          nodes.forEach(n => { n.pinned = true; });
+          ev.currentTarget.textContent = "▶ 물리 재개";
+          ev.currentTarget.classList.add("active");
+        } else {
+          nodes.forEach(n => { n.pinned = false; });
+          simAlpha = 0.45;
+          ev.currentTarget.textContent = "⏸ 물리 고정";
+          ev.currentTarget.classList.remove("active");
+        }
+      });
+
+      document.getElementById("btn-toggle-nlabel").addEventListener("click", (ev) => {
+        state.showNodeLabels = !state.showNodeLabels;
+        ev.currentTarget.textContent = state.showNodeLabels ? "인물명 ON" : "인물명 OFF";
+        ev.currentTarget.classList.toggle("active", state.showNodeLabels);
+        refreshStyles();
+      });
+
+      document.getElementById("btn-toggle-elabel").addEventListener("click", (ev) => {
+        state.showEdgeLabels = !state.showEdgeLabels;
+        ev.currentTarget.textContent = state.showEdgeLabels ? "관계명 ON" : "관계명 OFF";
+        ev.currentTarget.classList.toggle("active", state.showEdgeLabels);
+        refreshStyles();
+      });
+
+      window.addEventListener("resize", () => {
+        width = wrap.clientWidth || window.innerWidth;
+        height = wrap.clientHeight || window.innerHeight;
+        if (!state.physicsPaused) simAlpha = Math.max(simAlpha, 0.25);
+      });
+
+      // 초기 실행
+      renderSidebarFilters();
+      refreshStyles();
+    })();
+  </script>
+</body>
+</html>
